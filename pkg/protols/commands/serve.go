@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -25,12 +26,23 @@ import (
 func BuildServeCmd() *cobra.Command {
 	var stdio bool
 	var pipe string
+	var logFile string
 	var defaultLogLevel string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Start the language server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			slog.SetDefault(slog.New(slog.NewTextHandler(cmd.OutOrStderr(), &slog.HandlerOptions{
+			var logWriter io.Writer
+			if logFile == "" {
+				logWriter = cmd.OutOrStderr()
+			} else {
+				var err error
+				logWriter, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0o600)
+				if err != nil {
+					return fmt.Errorf("opening logfile %s: %v", logFile, err)
+				}
+			}
+			slog.SetDefault(slog.New(slog.NewTextHandler(logWriter, &slog.HandlerOptions{
 				AddSource: true,
 				Level:     lsp.GlobalAtomicLeveler,
 			})))
@@ -86,6 +98,7 @@ func BuildServeCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&defaultLogLevel, "default-log-level", "", "default log level (if not controlled by lsp client)")
 	cmd.Flags().BoolVar(&stdio, "stdio", false, "communicate over stdin/stdout")
+	cmd.Flags().StringVar(&logFile, "log-file", "", "file to write logs to, rather than stderr")
 	cmd.Flags().StringVar(&pipe, "pipe", "", "socket name to listen on")
 	cmd.MarkFlagsOneRequired("stdio", "pipe")
 	cmd.MarkFlagsMutuallyExclusive("stdio", "pipe")
